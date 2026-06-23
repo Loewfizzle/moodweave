@@ -24,3 +24,52 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
+
+/* Mood slider — native range input, themed and sized for comfortable touch.
+   The filled track color is set inline (per-value) in MoodSlider. */
+.mood-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.5rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Thumb — generous 20px target for thumbs on phones */
+.mood-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.25rem;
+  width: 1.25rem;
+  border-radius: 9999px;
+  background: #fafafa;
+  border: 2px solid var(--accent-violet);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
+  transition: box-shadow 0.15s ease;
+}
+
+.mood-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px rgba(139, 92, 246, 0.4);
+}
+
+/* Firefox equivalents */
+.mood-slider::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+.mood-slider::-moz-range-progress {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--accent-violet);
+}
+
+.mood-slider::-moz-range-thumb {
+  height: 1.25rem;
+  width: 1.25rem;
+  border: 2px solid var(--accent-violet);
+  border-radius: 9999px;
+  background: #fafafa;
+}
