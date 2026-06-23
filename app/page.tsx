@@ -11,16 +11,7 @@ export default function Home() {
           Match your mood. Make the music.
         </p>
 
-        <section className="mt-10 w-full rounded-2xl border border-white/10 bg-white/5 p-6 text-left sm:p-8">
-          <MoodWeaver />
-        </section>
-
-        <button
-          type="button"
-          className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 sm:w-auto"
-        >
-          Weave Playlist
-        </button>
+        <MoodWeaver />
       </div>
     </main>
   );
