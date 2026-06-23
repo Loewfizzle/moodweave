@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MoodWeave",
-  description: "Tune how you feel. We'll weave the playlist.",
+  description: "Match your mood. Make the music.",
 };
 
 export default function RootLayout({
