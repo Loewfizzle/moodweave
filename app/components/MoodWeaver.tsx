@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import MoodSlider from "@/app/components/MoodSlider";
+import ReactiveBackground from "@/app/components/ReactiveBackground";
 
 // One typed shape describing the whole mood. Phase 2's reactive background
 // will read from this same object (especially `energy` and `edge`).
@@ -39,77 +40,75 @@ export default function MoodWeaver() {
   const intensity = (values.energy + values.edge) / 200;
 
   return (
-    <div className="mt-10 w-full">
-      <section className="w-full rounded-2xl border border-white/10 bg-white/5 p-6 text-left sm:p-8">
-        <div className="flex flex-col gap-6">
-          <MoodSlider
-            label="Energy"
-            leftLabel="Calm"
-            rightLabel="Energetic"
-            value={values.energy}
-            onChange={update("energy")}
-          />
-          <MoodSlider
-            label="Mood"
-            leftLabel="Dark"
-            rightLabel="Light"
-            value={values.mood}
-            onChange={update("mood")}
-          />
-          <MoodSlider
-            label="Focus"
-            leftLabel="Background"
-            rightLabel="Main Character"
-            value={values.focus}
-            onChange={update("focus")}
-          />
-          <MoodSlider
-            label="Edge"
-            leftLabel="Safe"
-            rightLabel="Weird"
-            value={values.edge}
-            onChange={update("edge")}
-          />
-        </div>
+    <>
+      <ReactiveBackground intensity={intensity} />
 
-        {/* Temporary scaffolding to verify Step 1 — removed in Step 2 once
-            the background itself reflects intensity. */}
-        <p className="mt-6 text-center text-xs tabular-nums text-zinc-600">
-          intensity {intensity.toFixed(2)}
-        </p>
-      </section>
+      <div className="mt-10 w-full">
+        <section className="w-full rounded-2xl border border-white/10 bg-white/5 p-6 text-left sm:p-8">
+          <div className="flex flex-col gap-6">
+            <MoodSlider
+              label="Energy"
+              leftLabel="Calm"
+              rightLabel="Energetic"
+              value={values.energy}
+              onChange={update("energy")}
+            />
+            <MoodSlider
+              label="Mood"
+              leftLabel="Dark"
+              rightLabel="Light"
+              value={values.mood}
+              onChange={update("mood")}
+            />
+            <MoodSlider
+              label="Focus"
+              leftLabel="Background"
+              rightLabel="Main Character"
+              value={values.focus}
+              onChange={update("focus")}
+            />
+            <MoodSlider
+              label="Edge"
+              leftLabel="Safe"
+              rightLabel="Weird"
+              value={values.edge}
+              onChange={update("edge")}
+            />
+          </div>
+        </section>
 
-      <button
-        type="button"
-        onClick={handleWeave}
-        className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 sm:w-auto"
-      >
-        Weave Playlist
-      </button>
+        <button
+          type="button"
+          onClick={handleWeave}
+          className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 sm:w-auto"
+        >
+          Weave Playlist
+        </button>
 
-      {woven && (
-        <div className="mt-6 w-full rounded-xl border border-accent-teal/30 bg-accent-teal/5 p-4 text-left text-sm">
-          <p className="mb-3 font-medium text-accent-teal">Your woven mood</p>
-          <ul className="grid grid-cols-2 gap-x-6 gap-y-2 text-zinc-300">
-            <li className="flex justify-between">
-              <span>Energy</span>
-              <span className="tabular-nums text-zinc-500">{woven.energy}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Mood</span>
-              <span className="tabular-nums text-zinc-500">{woven.mood}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Focus</span>
-              <span className="tabular-nums text-zinc-500">{woven.focus}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Edge</span>
-              <span className="tabular-nums text-zinc-500">{woven.edge}</span>
-            </li>
-          </ul>
-        </div>
-      )}
-    </div>
+        {woven && (
+          <div className="mt-6 w-full rounded-xl border border-accent-teal/30 bg-accent-teal/5 p-4 text-left text-sm">
+            <p className="mb-3 font-medium text-accent-teal">Your woven mood</p>
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-2 text-zinc-300">
+              <li className="flex justify-between">
+                <span>Energy</span>
+                <span className="tabular-nums text-zinc-500">{woven.energy}</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Mood</span>
+                <span className="tabular-nums text-zinc-500">{woven.mood}</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Focus</span>
+                <span className="tabular-nums text-zinc-500">{woven.focus}</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Edge</span>
+                <span className="tabular-nums text-zinc-500">{woven.edge}</span>
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
