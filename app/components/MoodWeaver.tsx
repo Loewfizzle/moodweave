@@ -32,6 +32,12 @@ export default function MoodWeaver() {
 
   const handleWeave = () => setWoven(values);
 
+  // Phase 2 — a single 0–1 "intensity" derived from Energy + Edge.
+  // This is a *derived* value: computed every render, never stored in state,
+  // so it can't drift out of sync with the sliders. Everything reactive
+  // (background tone, accent saturation, glow) will read from this.
+  const intensity = (values.energy + values.edge) / 200;
+
   return (
     <div className="mt-10 w-full">
       <section className="w-full rounded-2xl border border-white/10 bg-white/5 p-6 text-left sm:p-8">
@@ -65,6 +71,12 @@ export default function MoodWeaver() {
             onChange={update("edge")}
           />
         </div>
+
+        {/* Temporary scaffolding to verify Step 1 — removed in Step 2 once
+            the background itself reflects intensity. */}
+        <p className="mt-6 text-center text-xs tabular-nums text-zinc-600">
+          intensity {intensity.toFixed(2)}
+        </p>
       </section>
 
       <button
