@@ -73,3 +73,30 @@ body {
   border-radius: 9999px;
   background: #fafafa;
 }
+
+/* Reactive orb — a gentle breathing pulse. Scale + opacity only, GPU-composited
+   via will-change. Strength comes from the orb's tone-driven opacity in JS;
+   speed (--orb-duration) is set per-intensity. */
+@keyframes orb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+.orb {
+  animation: orb-pulse var(--orb-duration, 6s) ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Respect users who prefer reduced motion: keep the glow, drop the pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .orb {
+    animation: none;
+  }
+}
