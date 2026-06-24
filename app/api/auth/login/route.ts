@@ -35,6 +35,9 @@ export async function GET() {
     redirect_uri: redirectUri,
     scope: SCOPES,
     state,
+    // Force the consent screen so the full, current scope set is granted
+    // (Spotify otherwise silently reuses a previously cached grant).
+    show_dialog: "true",
   });
 
   const response = NextResponse.redirect(

@@ -65,7 +65,11 @@ export async function GET(request: NextRequest) {
     access_token: string;
     refresh_token: string;
     expires_in: number;
+    scope?: string;
   };
+
+  // Log the granted scopes so we can confirm playlist-modify-* is present.
+  console.log(`[auth] granted scopes: ${token.scope ?? "(none)"}`);
 
   // 5. Success: store tokens in httpOnly cookies, clear the state cookie.
   // Redirect to a clean "/" — no lingering query param.
