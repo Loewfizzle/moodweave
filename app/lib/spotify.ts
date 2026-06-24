@@ -1,36 +1,7 @@
 import { cookies } from "next/headers";
 
-const SPOTIFY_ME_URL = "https://api.spotify.com/v1/me";
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API = "https://api.spotify.com/v1";
-
-export type SpotifyProfile = {
-  id: string;
-  displayName: string | null;
-};
-
-// Reads the access token from the httpOnly cookie and fetches the user's
-// Spotify profile. Returns null if not logged in — or if the token has
-// expired (automatic refresh is handled later, in the request that actually
-// creates a playlist, since a Server Component can't set new cookies).
-export async function getSpotifyProfile(): Promise<SpotifyProfile | null> {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get("sp_access_token")?.value;
-  if (!accessToken) return null;
-
-  const res = await fetch(SPOTIFY_ME_URL, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-
-  const data = (await res.json()) as {
-    id: string;
-    display_name: string | null;
-  };
-
-  return { id: data.id, displayName: data.display_name };
-}
 
 // Returns a usable access token, refreshing it if the current one has expired.
 // MUST be called from a Route Handler or Server Action — it may set cookies,
@@ -53,26 +24,30 @@ export async function getValidAccessToken(): Promise<string | null> {
   if (!clientId || !clientSecret) return null;
 
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const res = await fetch(SPOTIFY_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${basic}`,
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }),
-    cache: "no-store",
-  });
 
-  if (!res.ok) return null;
-
-  const data = (await res.json()) as {
+  let data: {
     access_token: string;
     expires_in: number;
     refresh_token?: string; // Spotify may rotate it
   };
+  try {
+    const res = await fetch(SPOTIFY_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basic}`,
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    data = await res.json();
+  } catch {
+    return null;
+  }
 
   const secure = process.env.NODE_ENV === "production";
 
@@ -84,7 +59,6 @@ export async function getValidAccessToken(): Promise<string | null> {
     maxAge: data.expires_in,
   });
 
-  // Persist the rotated refresh token if Spotify sent a new one.
   if (data.refresh_token) {
     cookieStore.set("sp_refresh_token", data.refresh_token, {
       httpOnly: true,
@@ -99,19 +73,35 @@ export async function getValidAccessToken(): Promise<string | null> {
 }
 
 // --- Spotify Web API helpers (each takes a valid access token) ---
+// Each catches network errors and returns a safe fallback so one failing call
+// can't crash the whole pipeline.
 
-// Current user's id (needed to create a playlist) and country (used as the
-// search market so results are playable for them).
-export async function getCurrentUser(
-  token: string,
-): Promise<{ id: string; country: string | null } | null> {
-  const res = await fetch(`${SPOTIFY_API}/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { id: string; country?: string };
-  return { id: data.id, country: data.country ?? null };
+// Current user's id (to create a playlist), country (search market), and
+// display name (shown in the UI).
+export async function getCurrentUser(token: string): Promise<{
+  id: string;
+  country: string | null;
+  displayName: string | null;
+} | null> {
+  try {
+    const res = await fetch(`${SPOTIFY_API}/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      id: string;
+      country?: string;
+      display_name?: string | null;
+    };
+    return {
+      id: data.id,
+      country: data.country ?? null,
+      displayName: data.display_name ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Search tracks for one query; returns their Spotify URIs.
@@ -121,23 +111,27 @@ export async function searchTracks(
   market: string | null,
   limit = 20,
 ): Promise<string[]> {
-  const params = new URLSearchParams({
-    q: query,
-    type: "track",
-    limit: String(limit),
-  });
-  if (market) params.set("market", market);
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      type: "track",
+      limit: String(limit),
+    });
+    if (market) params.set("market", market);
 
-  const res = await fetch(`${SPOTIFY_API}/search?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
+    const res = await fetch(`${SPOTIFY_API}/search?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
 
-  const data = (await res.json()) as {
-    tracks?: { items?: Array<{ uri: string }> };
-  };
-  return (data.tracks?.items ?? []).map((t) => t.uri);
+    const data = (await res.json()) as {
+      tracks?: { items?: Array<{ uri: string }> };
+    };
+    return (data.tracks?.items ?? []).map((t) => t.uri);
+  } catch {
+    return [];
+  }
 }
 
 // Create an empty playlist on the user's account.
@@ -148,22 +142,26 @@ export async function createPlaylist(
   description: string,
   isPublic: boolean,
 ): Promise<{ id: string; url: string } | null> {
-  const res = await fetch(`${SPOTIFY_API}/users/${userId}/playlists`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name, description, public: isPublic }),
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
+  try {
+    const res = await fetch(`${SPOTIFY_API}/users/${userId}/playlists`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name, description, public: isPublic }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
 
-  const data = (await res.json()) as {
-    id: string;
-    external_urls: { spotify: string };
-  };
-  return { id: data.id, url: data.external_urls.spotify };
+    const data = (await res.json()) as {
+      id: string;
+      external_urls: { spotify: string };
+    };
+    return { id: data.id, url: data.external_urls.spotify };
+  } catch {
+    return null;
+  }
 }
 
 // Add tracks (by URI) to a playlist. Up to 100 per request.
@@ -172,14 +170,18 @@ export async function addTracks(
   playlistId: string,
   uris: string[],
 ): Promise<boolean> {
-  const res = await fetch(`${SPOTIFY_API}/playlists/${playlistId}/tracks`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ uris }),
-    cache: "no-store",
-  });
-  return res.ok;
+  try {
+    const res = await fetch(`${SPOTIFY_API}/playlists/${playlistId}/tracks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ uris }),
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }

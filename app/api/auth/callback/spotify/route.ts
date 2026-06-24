@@ -68,7 +68,8 @@ export async function GET(request: NextRequest) {
   };
 
   // 5. Success: store tokens in httpOnly cookies, clear the state cookie.
-  const response = NextResponse.redirect(home("?spotify=connected"));
+  // Redirect to a clean "/" — no lingering query param.
+  const response = NextResponse.redirect(home(""));
   const secure = process.env.NODE_ENV === "production";
 
   response.cookies.set("sp_access_token", token.access_token, {

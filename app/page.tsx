@@ -1,8 +1,21 @@
 import MoodWeaver from "@/app/components/MoodWeaver";
-import { getSpotifyProfile } from "@/app/lib/spotify";
 
-export default async function Home() {
-  const profile = await getSpotifyProfile();
+// Friendly messages for the error codes the OAuth callback can redirect with.
+const OAUTH_ERRORS: Record<string, string> = {
+  denied: "Spotify access was declined. You can try connecting again.",
+  state_mismatch: "Couldn't verify your login. Please try connecting again.",
+  token_error: "Spotify login failed. Please try again.",
+  config_error: "Server configuration error. Please try again later.",
+  error: "Something went wrong during login. Please try again.",
+};
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ spotify?: string }>;
+}) {
+  const { spotify } = await searchParams;
+  const oauthError = spotify ? (OAUTH_ERRORS[spotify] ?? OAUTH_ERRORS.error) : null;
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
@@ -14,17 +27,10 @@ export default async function Home() {
           Match your mood. Make the music.
         </p>
 
-        {profile ? (
-          <p className="mt-6 text-sm text-accent-teal">
-            Connected as {profile.displayName ?? "your Spotify account"}
+        {oauthError && (
+          <p role="alert" className="mt-4 text-sm text-red-400">
+            {oauthError}
           </p>
-        ) : (
-          <a
-            href="/api/auth/login"
-            className="mt-6 rounded-full border border-accent-teal/40 px-5 py-2 text-sm font-medium text-accent-teal transition hover:bg-accent-teal/10"
-          >
-            Connect Spotify
-          </a>
         )}
 
         <MoodWeaver />

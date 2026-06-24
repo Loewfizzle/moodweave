@@ -45,53 +45,70 @@ export async function POST(request: NextRequest) {
   }
   const mood = body;
 
-  // 2. Auth (refreshes the access token if it expired).
-  const token = await getValidAccessToken();
-  if (!token) {
-    return NextResponse.json({ error: "not_connected" }, { status: 401 });
+  // Optional client-supplied label (local date/time) for the playlist name.
+  const rawLabel = (body as { label?: unknown }).label;
+  const label =
+    typeof rawLabel === "string"
+      ? rawLabel.replace(/[\r\n]+/g, " ").trim().slice(0, 60)
+      : "";
+
+  try {
+    // 2. Auth (refreshes the access token if it expired).
+    const token = await getValidAccessToken();
+    if (!token) {
+      return NextResponse.json({ error: "not_connected" }, { status: 401 });
+    }
+
+    // 3. Who are we building for?
+    const user = await getCurrentUser(token);
+    if (!user) {
+      return NextResponse.json({ error: "profile_failed" }, { status: 502 });
+    }
+
+    // 4. Mood → queries → search (in parallel) → pooled, deduped, shuffled.
+    const queries = moodToQueries(mood);
+    const results = await Promise.all(
+      queries.map((q) => searchTracks(token, q, user.country, PER_QUERY_LIMIT)),
+    );
+    const pool = new Set<string>();
+    for (const list of results) for (const uri of list) pool.add(uri);
+    const uris = shuffle([...pool]).slice(0, TARGET_TRACKS);
+
+    if (uris.length === 0) {
+      return NextResponse.json({ error: "no_tracks" }, { status: 422 });
+    }
+
+    // 5. Create the playlist and fill it.
+    const fallbackDate = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const name = `MoodWeave · ${label || fallbackDate}`;
+    const description = "Woven to match your mood with MoodWeave.";
+
+    const playlist = await createPlaylist(
+      token,
+      user.id,
+      name,
+      description,
+      false,
+    );
+    if (!playlist) {
+      return NextResponse.json({ error: "create_failed" }, { status: 502 });
+    }
+
+    const added = await addTracks(token, playlist.id, uris);
+    if (!added) {
+      return NextResponse.json({ error: "add_failed" }, { status: 502 });
+    }
+
+    // 6. Done — hand the playlist back to the UI.
+    return NextResponse.json({
+      url: playlist.url,
+      name,
+      trackCount: uris.length,
+    });
+  } catch {
+    return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
-
-  // 3. Who are we building for?
-  const user = await getCurrentUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "profile_failed" }, { status: 502 });
-  }
-
-  // 4. Mood → queries → search (in parallel) → pooled, deduped, shuffled.
-  const queries = moodToQueries(mood);
-  const results = await Promise.all(
-    queries.map((q) => searchTracks(token, q, user.country, PER_QUERY_LIMIT)),
-  );
-  const pool = new Set<string>();
-  for (const list of results) for (const uri of list) pool.add(uri);
-  const uris = shuffle([...pool]).slice(0, TARGET_TRACKS);
-
-  if (uris.length === 0) {
-    return NextResponse.json({ error: "no_tracks" }, { status: 422 });
-  }
-
-  // 5. Create the playlist and fill it.
-  const dateStr = new Date().toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-  const name = `MoodWeave · ${dateStr}`;
-  const description = "Woven to match your mood with MoodWeave.";
-
-  const playlist = await createPlaylist(token, user.id, name, description, false);
-  if (!playlist) {
-    return NextResponse.json({ error: "create_failed" }, { status: 502 });
-  }
-
-  const added = await addTracks(token, playlist.id, uris);
-  if (!added) {
-    return NextResponse.json({ error: "add_failed" }, { status: 502 });
-  }
-
-  // 6. Done — hand the playlist back to the UI.
-  return NextResponse.json({
-    url: playlist.url,
-    name,
-    trackCount: uris.length,
-  });
 }
