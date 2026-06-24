@@ -4,6 +4,8 @@ import { useState } from "react";
 import MoodSlider from "@/app/components/MoodSlider";
 import type { MoodValues } from "@/app/lib/mood";
 
+type WeaveResult = { url: string; name: string; trackCount: number };
+
 export default function MoodWeaver() {
   const [values, setValues] = useState<MoodValues>({
     energy: 3,
@@ -12,9 +14,9 @@ export default function MoodWeaver() {
     edge: 3,
   });
 
-  // A snapshot of the mood captured when "Weave Playlist" is clicked.
-  // Temporary: this is where Spotify generation will hook in later.
-  const [woven, setWoven] = useState<MoodValues | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<WeaveResult | null>(null);
+  const [error, setError] = useState<string | null>(null); // error code
 
   // Returns an onChange handler for a single dimension. We use a *functional*
   // update and spread the previous object so state is never mutated directly —
@@ -22,7 +24,28 @@ export default function MoodWeaver() {
   const update = (key: keyof MoodValues) => (value: number) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
-  const handleWeave = () => setWoven(values);
+  const handleWeave = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/weave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data?.error === "string" ? data.error : "unknown");
+      } else {
+        setResult(data as WeaveResult);
+      }
+    } catch {
+      setError("unknown");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="mt-10 w-full">
@@ -62,33 +85,45 @@ export default function MoodWeaver() {
       <button
         type="button"
         onClick={handleWeave}
-        className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 sm:w-auto"
+        disabled={loading}
+        className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       >
-        Weave Playlist
+        {loading ? "Weaving…" : "Weave Playlist"}
       </button>
 
-      {woven && (
-        <div className="mt-6 w-full rounded-xl border border-accent-teal/30 bg-accent-teal/5 p-4 text-left text-sm">
-          <p className="mb-3 font-medium text-accent-teal">Your woven mood</p>
-          <ul className="grid grid-cols-2 gap-x-6 gap-y-2 text-zinc-300">
-            <li className="flex justify-between">
-              <span>Energy</span>
-              <span className="tabular-nums text-zinc-500">{woven.energy}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Mood</span>
-              <span className="tabular-nums text-zinc-500">{woven.mood}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Focus</span>
-              <span className="tabular-nums text-zinc-500">{woven.focus}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Edge</span>
-              <span className="tabular-nums text-zinc-500">{woven.edge}</span>
-            </li>
-          </ul>
+      {result && (
+        <div className="mt-6 w-full rounded-xl border border-accent-teal/30 bg-accent-teal/5 p-4 text-left">
+          <p className="font-medium text-accent-teal">Playlist ready</p>
+          <p className="mt-1 text-sm text-zinc-300">
+            {result.name} · {result.trackCount} tracks
+          </p>
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-block rounded-full bg-accent-teal px-5 py-2 text-sm font-medium text-zinc-950 transition hover:brightness-110"
+          >
+            Open in Spotify →
+          </a>
         </div>
+      )}
+
+      {error && (
+        <p className="mt-4 text-sm text-red-400">
+          {error === "not_connected" ? (
+            <>
+              Your Spotify session expired.{" "}
+              <a href="/api/auth/login" className="underline">
+                Reconnect
+              </a>
+              .
+            </>
+          ) : error === "no_tracks" ? (
+            "No tracks matched that mood — try adjusting your sliders."
+          ) : (
+            "Couldn't weave a playlist. Please try again."
+          )}
+        </p>
       )}
     </div>
   );
