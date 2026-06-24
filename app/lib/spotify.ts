@@ -165,7 +165,12 @@ export async function createPlaylist(
       body: JSON.stringify({ name, description, public: isPublic }),
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(
+        `[spotify] createPlaylist failed ${res.status} ${await res.text().catch(() => "")}`,
+      );
+      return null;
+    }
 
     const data = (await res.json()) as {
       id: string;
@@ -193,6 +198,11 @@ export async function addTracks(
       body: JSON.stringify({ uris }),
       cache: "no-store",
     });
+    if (!res.ok) {
+      console.error(
+        `[spotify] addTracks failed ${res.status} ${await res.text().catch(() => "")}`,
+      );
+    }
     return res.ok;
   } catch {
     return false;
