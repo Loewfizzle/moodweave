@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import MoodSlider from "@/app/components/MoodSlider";
-
-// One typed shape describing the whole mood.
-type MoodValues = {
-  energy: number;
-  mood: number;
-  focus: number;
-  edge: number;
-};
+import type { MoodValues } from "@/app/lib/mood";
 
 export default function MoodWeaver() {
   const [values, setValues] = useState<MoodValues>({
