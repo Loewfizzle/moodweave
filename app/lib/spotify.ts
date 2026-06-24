@@ -114,10 +114,13 @@ export async function searchTracks(
   limit = 20,
 ): Promise<{ ok: boolean; uris: string[] }> {
   try {
+    // Spotify requires an integer limit in [1, 50]. Clamp defensively so a bad
+    // caller value can never produce a 400 "Invalid limit".
+    const safeLimit = Math.min(50, Math.max(1, Math.round(limit) || 20));
     const params = new URLSearchParams({
       q: query,
       type: "track",
-      limit: String(limit),
+      limit: String(safeLimit),
     });
     if (market) params.set("market", market);
 
@@ -128,7 +131,7 @@ export async function searchTracks(
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       console.error(
-        `[spotify] search failed ${res.status} for "${query}" ${detail}`,
+        `[spotify] search failed ${res.status} for "${query}" (limit=${safeLimit}) ${detail}`,
       );
       return { ok: false, uris: [] };
     }
