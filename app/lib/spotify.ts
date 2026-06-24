@@ -111,12 +111,13 @@ export async function searchTracks(
   token: string,
   query: string,
   market: string | null,
-  limit = 20,
+  limit = 10,
 ): Promise<{ ok: boolean; uris: string[] }> {
   try {
-    // Spotify requires an integer limit in [1, 50]. Clamp defensively so a bad
-    // caller value can never produce a 400 "Invalid limit".
-    const safeLimit = Math.min(50, Math.max(1, Math.round(limit) || 20));
+    // Spotify requires a positive integer limit, and the restricted access
+    // tier caps it low (≥ ~20 returns 400 "Invalid limit"). Clamp to [1, 50]
+    // defensively; callers should pass ≤ 10 on this tier.
+    const safeLimit = Math.min(50, Math.max(1, Math.round(limit) || 10));
     const params = new URLSearchParams({
       q: query,
       type: "track",

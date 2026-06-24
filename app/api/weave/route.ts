@@ -11,7 +11,10 @@ import { moodToQueries, type MoodValues } from "@/app/lib/mood";
 export const dynamic = "force-dynamic";
 
 const TARGET_TRACKS = 25;
-const PER_QUERY_LIMIT = 20;
+// Spotify's restricted/development access tier caps search results low — a
+// limit above ~10 returns 400 "Invalid limit". 10 per query is safe and, with
+// several queries deduped, still fills a ~25-track playlist.
+const PER_QUERY_LIMIT = 10;
 
 // Guard the incoming body: must be four numeric sliders in range 1–5.
 function isValidMood(value: unknown): value is MoodValues {
