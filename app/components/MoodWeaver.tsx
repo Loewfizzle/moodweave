@@ -77,8 +77,11 @@ export default function MoodWeaver() {
         if (code === "not_connected") {
           setConnection({ connected: false, displayName: null });
         }
-      } else {
+      } else if (data && typeof data.url === "string") {
         setResult(data as WeaveResult);
+      } else {
+        // 200 but no playlist: valid request, just no matching tracks.
+        setError("no_tracks");
       }
     } catch {
       setError("unknown");
@@ -181,7 +184,14 @@ export default function MoodWeaver() {
           </div>
         )}
 
-        {error && (
+        {/* Genuine "no matches" is a neutral note, not an error. */}
+        {error === "no_tracks" && (
+          <p className="mt-4 text-sm text-zinc-400">
+            No tracks matched that mood — try adjusting your sliders.
+          </p>
+        )}
+
+        {error && error !== "no_tracks" && (
           <p className="mt-4 text-sm text-red-400">
             {error === "not_connected" ? (
               <>
@@ -191,8 +201,8 @@ export default function MoodWeaver() {
                 </a>
                 .
               </>
-            ) : error === "no_tracks" ? (
-              "No tracks matched that mood — try adjusting your sliders."
+            ) : error === "search_failed" ? (
+              "Spotify search isn't responding right now. Please try again."
             ) : (
               "Couldn't weave a playlist. Please try again."
             )}

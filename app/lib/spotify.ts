@@ -104,13 +104,15 @@ export async function getCurrentUser(token: string): Promise<{
   }
 }
 
-// Search tracks for one query; returns their Spotify URIs.
+// Search tracks for one query. Returns whether the request *succeeded* (so the
+// caller can distinguish a failed search from a genuinely empty one) plus the
+// matching track URIs. Logs the real status on failure for debugging.
 export async function searchTracks(
   token: string,
   query: string,
   market: string | null,
   limit = 20,
-): Promise<string[]> {
+): Promise<{ ok: boolean; uris: string[] }> {
   try {
     const params = new URLSearchParams({
       q: query,
@@ -123,14 +125,21 @@ export async function searchTracks(
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error(
+        `[spotify] search failed ${res.status} for "${query}" ${detail}`,
+      );
+      return { ok: false, uris: [] };
+    }
 
     const data = (await res.json()) as {
       tracks?: { items?: Array<{ uri: string }> };
     };
-    return (data.tracks?.items ?? []).map((t) => t.uri);
-  } catch {
-    return [];
+    return { ok: true, uris: (data.tracks?.items ?? []).map((t) => t.uri) };
+  } catch (err) {
+    console.error(`[spotify] search error for "${query}"`, err);
+    return { ok: false, uris: [] };
   }
 }
 

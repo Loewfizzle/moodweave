@@ -70,12 +70,24 @@ export async function POST(request: NextRequest) {
     const results = await Promise.all(
       queries.map((q) => searchTracks(token, q, user.country, PER_QUERY_LIMIT)),
     );
+    const anySearchOk = results.some((r) => r.ok);
     const pool = new Set<string>();
-    for (const list of results) for (const uri of list) pool.add(uri);
+    for (const r of results) for (const uri of r.uris) pool.add(uri);
     const uris = shuffle([...pool]).slice(0, TARGET_TRACKS);
 
+    console.log(
+      `[weave] queries=${JSON.stringify(queries)} market=${user.country} ` +
+        `pool=${pool.size} anySearchOk=${anySearchOk}`,
+    );
+
     if (uris.length === 0) {
-      return NextResponse.json({ error: "no_tracks" }, { status: 422 });
+      // Every search request failed → a real problem, not a genuine no-match.
+      if (!anySearchOk) {
+        return NextResponse.json({ error: "search_failed" }, { status: 502 });
+      }
+      // Valid request, searches worked, but nothing matched this mood.
+      // Return 200 so a true "no matches" isn't treated as an error.
+      return NextResponse.json({ matched: false, trackCount: 0 });
     }
 
     // 5. Create the playlist and fill it.
