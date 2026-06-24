@@ -10,8 +10,17 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  // Helper to build an absolute redirect back to the homepage.
-  const home = (query: string) => new URL(`/${query}`, request.url);
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+
+  // Send the user back to the SAME host as the redirect URI, so the browser
+  // stays on the host where the cookies were actually set. (In dev this avoids
+  // the localhost vs 127.0.0.1 cookie-jar split.)
+  const appOrigin = redirectUri
+    ? new URL(redirectUri).origin
+    : new URL(request.url).origin;
+  const home = (query: string) => new URL(`/${query}`, appOrigin);
 
   // 1. User denied consent, or Spotify reported an error.
   if (error) {
@@ -29,9 +38,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(home("?spotify=state_mismatch"));
   }
 
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-  const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
   if (!clientId || !clientSecret || !redirectUri) {
     return NextResponse.redirect(home("?spotify=config_error"));
   }
