@@ -13,10 +13,10 @@ type MoodValues = {
 
 export default function MoodWeaver() {
   const [values, setValues] = useState<MoodValues>({
-    energy: 50,
-    mood: 50,
-    focus: 50,
-    edge: 50,
+    energy: 3,
+    mood: 3,
+    focus: 3,
+    edge: 3,
   });
 
   // A snapshot of the mood captured when "Weave Playlist" is clicked.
