@@ -1,10 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  getValidAccessToken,
-  getCurrentUser,
-  searchTracks,
-  type Track,
-} from "@/app/lib/spotify";
+import { getAppToken, searchTracks, type Track } from "@/app/lib/spotify";
 import { moodToQueries, type MoodValues } from "@/app/lib/mood";
 
 export const dynamic = "force-dynamic";
@@ -45,20 +40,16 @@ export async function POST(request: NextRequest) {
   const mood = body;
 
   try {
-    // 2. Auth (refreshes the access token if it expired).
-    const token = await getValidAccessToken();
+    // 2. App-level token (no user login required).
+    const token = await getAppToken();
     if (!token) {
-      return NextResponse.json({ error: "not_connected" }, { status: 401 });
+      return NextResponse.json({ error: "config_error" }, { status: 500 });
     }
 
-    // 3. The user's market makes results playable for them (best-effort).
-    const user = await getCurrentUser(token);
-    const market = user?.country ?? null;
-
-    // 4. Mood → queries → search (in parallel) → deduped + shuffled tracks.
+    // 3. Mood → queries → search (in parallel) → deduped + shuffled tracks.
     const queries = moodToQueries(mood);
     const results = await Promise.all(
-      queries.map((q) => searchTracks(token, q, market, PER_QUERY_LIMIT)),
+      queries.map((q) => searchTracks(token, q, null, PER_QUERY_LIMIT)),
     );
     const anySearchOk = results.some((r) => r.ok);
 
@@ -69,16 +60,14 @@ export async function POST(request: NextRequest) {
     const tracks = shuffle([...byId.values()]).slice(0, TARGET_TRACKS);
 
     console.log(
-      `[weave] queries=${JSON.stringify(queries)} market=${market} ` +
-        `unique=${byId.size} anySearchOk=${anySearchOk}`,
+      `[weave] queries=${JSON.stringify(queries)} unique=${byId.size} ` +
+        `anySearchOk=${anySearchOk}`,
     );
 
-    // Every search failed → a real problem, not a genuine no-match.
     if (tracks.length === 0 && !anySearchOk) {
       return NextResponse.json({ error: "search_failed" }, { status: 502 });
     }
 
-    // 200 with the tracks (possibly empty → UI shows a "no matches" note).
     return NextResponse.json({ tracks });
   } catch {
     return NextResponse.json({ error: "server_error" }, { status: 500 });

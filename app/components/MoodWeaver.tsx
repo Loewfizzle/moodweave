@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import MoodSlider from "@/app/components/MoodSlider";
 import type { MoodValues } from "@/app/lib/mood";
 import type { Track } from "@/app/lib/spotify";
-
-type Connection = { connected: boolean; displayName: string | null };
 
 export default function MoodWeaver() {
   const [values, setValues] = useState<MoodValues>({
@@ -16,34 +14,9 @@ export default function MoodWeaver() {
     edge: 3,
   });
 
-  const [connection, setConnection] = useState<Connection | null>(null); // null = checking
   const [loading, setLoading] = useState(false);
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [error, setError] = useState<string | null>(null); // error code
-
-  // Check connection on mount via /api/me (which can refresh an expired token).
-  useEffect(() => {
-    let active = true;
-    fetch("/api/me")
-      .then((r) => r.json())
-      .then((d) => {
-        if (active) {
-          setConnection({
-            connected: !!d.connected,
-            displayName: d.displayName ?? null,
-          });
-        }
-      })
-      .catch(() => {
-        if (active) setConnection({ connected: false, displayName: null });
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const checking = connection === null;
-  const connected = connection?.connected ?? false;
 
   const update = (key: keyof MoodValues) => (value: number) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -52,7 +25,7 @@ export default function MoodWeaver() {
   };
 
   const handleWeave = async () => {
-    if (!connected || loading) return;
+    if (loading) return;
     setLoading(true);
     setError(null);
     setTracks(null);
@@ -64,11 +37,7 @@ export default function MoodWeaver() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const code = typeof data?.error === "string" ? data.error : "unknown";
-        setError(code);
-        if (code === "not_connected") {
-          setConnection({ connected: false, displayName: null });
-        }
+        setError(typeof data?.error === "string" ? data.error : "unknown");
       } else if (Array.isArray(data.tracks) && data.tracks.length > 0) {
         setTracks(data.tracks as Track[]);
       } else {
@@ -83,31 +52,6 @@ export default function MoodWeaver() {
 
   return (
     <div className="mt-10 w-full">
-      {/* Connection status */}
-      <div className="mb-6 text-center text-sm" aria-live="polite">
-        {checking ? (
-          <span className="text-zinc-500">Checking connection…</span>
-        ) : connected ? (
-          <span className="text-accent-teal">
-            Connected as {connection?.displayName ?? "your Spotify account"}
-            {" · "}
-            <a
-              href="/api/auth/logout"
-              className="text-zinc-500 underline transition hover:text-zinc-300"
-            >
-              Disconnect
-            </a>
-          </span>
-        ) : (
-          <a
-            href="/api/auth/login"
-            className="inline-block rounded-full border border-accent-teal/40 px-5 py-2 font-medium text-accent-teal transition hover:bg-accent-teal/10"
-          >
-            Connect Spotify
-          </a>
-        )}
-      </div>
-
       <section className="w-full rounded-2xl border border-white/10 bg-white/5 p-6 text-left sm:p-8">
         <div className="flex flex-col gap-6">
           <MoodSlider
@@ -145,16 +89,11 @@ export default function MoodWeaver() {
         <button
           type="button"
           onClick={handleWeave}
-          disabled={loading || checking || !connected}
+          disabled={loading}
           className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           {loading ? "Weaving…" : "Weave My Mix"}
         </button>
-        {!checking && !connected && (
-          <p className="mt-2 text-center text-xs text-zinc-500">
-            Connect Spotify to weave a mix.
-          </p>
-        )}
       </div>
 
       <div aria-live="polite">
@@ -211,19 +150,9 @@ export default function MoodWeaver() {
 
         {error && error !== "no_tracks" && (
           <p className="mt-4 text-sm text-red-400">
-            {error === "not_connected" ? (
-              <>
-                Your Spotify session expired.{" "}
-                <a href="/api/auth/login" className="underline">
-                  Reconnect
-                </a>
-                .
-              </>
-            ) : error === "search_failed" ? (
-              "Spotify search isn't responding right now. Please try again."
-            ) : (
-              "Couldn't fetch tracks. Please try again."
-            )}
+            {error === "search_failed"
+              ? "Spotify search isn't responding right now. Please try again."
+              : "Couldn't fetch tracks. Please try again."}
           </p>
         )}
       </div>
