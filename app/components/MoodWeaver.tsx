@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import MoodSlider from "@/app/components/MoodSlider";
 import type { MoodValues } from "@/app/lib/mood";
+import type { Track } from "@/app/lib/spotify";
 
-type WeaveResult = { url: string; name: string; trackCount: number };
 type Connection = { connected: boolean; displayName: string | null };
 
 export default function MoodWeaver() {
@@ -17,7 +18,7 @@ export default function MoodWeaver() {
 
   const [connection, setConnection] = useState<Connection | null>(null); // null = checking
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<WeaveResult | null>(null);
+  const [tracks, setTracks] = useState<Track[] | null>(null);
   const [error, setError] = useState<string | null>(null); // error code
 
   // Check connection on mount via /api/me (which can refresh an expired token).
@@ -44,11 +45,9 @@ export default function MoodWeaver() {
   const checking = connection === null;
   const connected = connection?.connected ?? false;
 
-  // Functional, immutable update. Also clears any stale result/error since the
-  // mood has changed.
   const update = (key: keyof MoodValues) => (value: number) => {
     setValues((prev) => ({ ...prev, [key]: value }));
-    setResult(null);
+    setTracks(null);
     setError(null);
   };
 
@@ -56,19 +55,12 @@ export default function MoodWeaver() {
     if (!connected || loading) return;
     setLoading(true);
     setError(null);
-    setResult(null);
+    setTracks(null);
     try {
-      // A local, timezone-correct label so each playlist name is distinct.
-      const label = new Date().toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
       const res = await fetch("/api/weave", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, label }),
+        body: JSON.stringify(values),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -77,10 +69,9 @@ export default function MoodWeaver() {
         if (code === "not_connected") {
           setConnection({ connected: false, displayName: null });
         }
-      } else if (data && typeof data.url === "string") {
-        setResult(data as WeaveResult);
+      } else if (Array.isArray(data.tracks) && data.tracks.length > 0) {
+        setTracks(data.tracks as Track[]);
       } else {
-        // 200 but no playlist: valid request, just no matching tracks.
         setError("no_tracks");
       }
     } catch {
@@ -157,30 +148,57 @@ export default function MoodWeaver() {
           disabled={loading || checking || !connected}
           className="mt-6 w-full rounded-full bg-accent-violet px-8 py-3 text-base font-medium text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {loading ? "Weaving…" : "Weave Playlist"}
+          {loading ? "Weaving…" : "Weave My Mix"}
         </button>
         {!checking && !connected && (
           <p className="mt-2 text-center text-xs text-zinc-500">
-            Connect Spotify to weave a playlist.
+            Connect Spotify to weave a mix.
           </p>
         )}
       </div>
 
       <div aria-live="polite">
-        {result && (
+        {tracks && tracks.length > 0 && (
           <div className="mt-6 w-full rounded-xl border border-accent-teal/30 bg-accent-teal/5 p-4 text-left">
-            <p className="font-medium text-accent-teal">Playlist ready</p>
-            <p className="mt-1 text-sm text-zinc-300">
-              {result.name} · {result.trackCount} tracks
+            <p className="font-medium text-accent-teal">
+              {tracks.length} tracks for your mood
             </p>
-            <a
-              href={result.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-block rounded-full bg-accent-teal px-5 py-2 text-sm font-medium text-zinc-950 transition hover:brightness-110"
-            >
-              Open in Spotify →
-            </a>
+            <p className="mt-1 text-xs text-zinc-500">
+              Tap a track to open it in Spotify.
+            </p>
+            <ul className="mt-3 flex max-h-80 flex-col gap-1 overflow-y-auto">
+              {tracks.map((t) => (
+                <li key={t.id}>
+                  <a
+                    href={t.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-lg p-2 transition hover:bg-white/5"
+                  >
+                    {t.image ? (
+                      <Image
+                        src={t.image}
+                        alt=""
+                        width={40}
+                        height={40}
+                        unoptimized
+                        className="h-10 w-10 flex-none rounded object-cover"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 flex-none rounded bg-white/10" />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-zinc-100">
+                        {t.name}
+                      </span>
+                      <span className="block truncate text-xs text-zinc-400">
+                        {t.artist}
+                      </span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -204,7 +222,7 @@ export default function MoodWeaver() {
             ) : error === "search_failed" ? (
               "Spotify search isn't responding right now. Please try again."
             ) : (
-              "Couldn't weave a playlist. Please try again."
+              "Couldn't fetch tracks. Please try again."
             )}
           </p>
         )}

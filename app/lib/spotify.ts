@@ -10,12 +10,9 @@ const SPOTIFY_API = "https://api.spotify.com/v1";
 export async function getValidAccessToken(): Promise<string | null> {
   const cookieStore = await cookies();
 
-  // If the access-token cookie still exists, it's valid (its lifetime matches
-  // the token's), so use it directly.
   const existing = cookieStore.get("sp_access_token")?.value;
   if (existing) return existing;
 
-  // Otherwise try to refresh.
   const refreshToken = cookieStore.get("sp_refresh_token")?.value;
   if (!refreshToken) return null;
 
@@ -28,7 +25,7 @@ export async function getValidAccessToken(): Promise<string | null> {
   let data: {
     access_token: string;
     expires_in: number;
-    refresh_token?: string; // Spotify may rotate it
+    refresh_token?: string;
   };
   try {
     const res = await fetch(SPOTIFY_TOKEN_URL, {
@@ -72,12 +69,8 @@ export async function getValidAccessToken(): Promise<string | null> {
   return data.access_token;
 }
 
-// --- Spotify Web API helpers (each takes a valid access token) ---
-// Each catches network errors and returns a safe fallback so one failing call
-// can't crash the whole pipeline.
-
-// Current user's id (to create a playlist), country (search market), and
-// display name (shown in the UI).
+// Current user's id, country (used as the search market so results are
+// playable for them), and display name (shown in the UI).
 export async function getCurrentUser(token: string): Promise<{
   id: string;
   country: string | null;
@@ -104,19 +97,24 @@ export async function getCurrentUser(token: string): Promise<{
   }
 }
 
-// Search tracks for one query. Returns whether the request *succeeded* (so the
-// caller can distinguish a failed search from a genuinely empty one) plus the
-// matching track URIs. Logs the real status on failure for debugging.
+export type Track = {
+  id: string;
+  name: string;
+  artist: string;
+  image: string | null; // album art (smallest available)
+  url: string; // open.spotify.com link
+};
+
+// Search tracks for one query. Returns whether the request succeeded (so the
+// caller can tell a failed search from a genuinely empty one) plus the tracks.
 export async function searchTracks(
   token: string,
   query: string,
   market: string | null,
   limit = 10,
-): Promise<{ ok: boolean; uris: string[] }> {
+): Promise<{ ok: boolean; tracks: Track[] }> {
   try {
-    // Spotify requires a positive integer limit, and the restricted access
-    // tier caps it low (≥ ~20 returns 400 "Invalid limit"). Clamp to [1, 50]
-    // defensively; callers should pass ≤ 10 on this tier.
+    // Spotify's restricted tier caps the limit low (≥ ~20 returns 400). Clamp.
     const safeLimit = Math.min(50, Math.max(1, Math.round(limit) || 10));
     const params = new URLSearchParams({
       q: query,
@@ -134,77 +132,35 @@ export async function searchTracks(
       console.error(
         `[spotify] search failed ${res.status} for "${query}" (limit=${safeLimit}) ${detail}`,
       );
-      return { ok: false, uris: [] };
+      return { ok: false, tracks: [] };
     }
 
     const data = (await res.json()) as {
-      tracks?: { items?: Array<{ uri: string }> };
+      tracks?: {
+        items?: Array<{
+          id: string;
+          name: string;
+          artists?: { name: string }[];
+          album?: { images?: { url: string }[] };
+          external_urls?: { spotify: string };
+        }>;
+      };
     };
-    return { ok: true, uris: (data.tracks?.items ?? []).map((t) => t.uri) };
+
+    const tracks: Track[] = (data.tracks?.items ?? []).map((t) => {
+      const imgs = t.album?.images ?? [];
+      return {
+        id: t.id,
+        name: t.name,
+        artist: (t.artists ?? []).map((a) => a.name).join(", "),
+        image: imgs.length ? imgs[imgs.length - 1].url : null, // smallest
+        url: t.external_urls?.spotify ?? "",
+      };
+    });
+
+    return { ok: true, tracks };
   } catch (err) {
     console.error(`[spotify] search error for "${query}"`, err);
-    return { ok: false, uris: [] };
-  }
-}
-
-// Create an empty playlist on the user's account.
-export async function createPlaylist(
-  token: string,
-  userId: string,
-  name: string,
-  description: string,
-  isPublic: boolean,
-): Promise<{ id: string; url: string } | null> {
-  try {
-    const res = await fetch(`${SPOTIFY_API}/users/${userId}/playlists`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name, description, public: isPublic }),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      console.error(
-        `[spotify] createPlaylist failed ${res.status} ${await res.text().catch(() => "")}`,
-      );
-      return null;
-    }
-
-    const data = (await res.json()) as {
-      id: string;
-      external_urls: { spotify: string };
-    };
-    return { id: data.id, url: data.external_urls.spotify };
-  } catch {
-    return null;
-  }
-}
-
-// Add tracks (by URI) to a playlist. Up to 100 per request.
-export async function addTracks(
-  token: string,
-  playlistId: string,
-  uris: string[],
-): Promise<boolean> {
-  try {
-    const res = await fetch(`${SPOTIFY_API}/playlists/${playlistId}/tracks`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ uris }),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      console.error(
-        `[spotify] addTracks failed ${res.status} ${await res.text().catch(() => "")}`,
-      );
-    }
-    return res.ok;
-  } catch {
-    return false;
+    return { ok: false, tracks: [] };
   }
 }

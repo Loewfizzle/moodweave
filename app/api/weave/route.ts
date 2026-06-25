@@ -3,17 +3,13 @@ import {
   getValidAccessToken,
   getCurrentUser,
   searchTracks,
-  createPlaylist,
-  addTracks,
+  type Track,
 } from "@/app/lib/spotify";
 import { moodToQueries, type MoodValues } from "@/app/lib/mood";
 
 export const dynamic = "force-dynamic";
 
 const TARGET_TRACKS = 25;
-// Spotify's restricted/development access tier caps search results low — a
-// limit above ~10 returns 400 "Invalid limit". 10 per query is safe and, with
-// several queries deduped, still fills a ~25-track playlist.
 const PER_QUERY_LIMIT = 10;
 
 // Guard the incoming body: must be four numeric sliders in range 1–5.
@@ -48,13 +44,6 @@ export async function POST(request: NextRequest) {
   }
   const mood = body;
 
-  // Optional client-supplied label (local date/time) for the playlist name.
-  const rawLabel = (body as { label?: unknown }).label;
-  const label =
-    typeof rawLabel === "string"
-      ? rawLabel.replace(/[\r\n]+/g, " ").trim().slice(0, 60)
-      : "";
-
   try {
     // 2. Auth (refreshes the access token if it expired).
     const token = await getValidAccessToken();
@@ -62,67 +51,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "not_connected" }, { status: 401 });
     }
 
-    // 3. Who are we building for?
+    // 3. The user's market makes results playable for them (best-effort).
     const user = await getCurrentUser(token);
-    if (!user) {
-      return NextResponse.json({ error: "profile_failed" }, { status: 502 });
-    }
+    const market = user?.country ?? null;
 
-    // 4. Mood → queries → search (in parallel) → pooled, deduped, shuffled.
+    // 4. Mood → queries → search (in parallel) → deduped + shuffled tracks.
     const queries = moodToQueries(mood);
     const results = await Promise.all(
-      queries.map((q) => searchTracks(token, q, user.country, PER_QUERY_LIMIT)),
+      queries.map((q) => searchTracks(token, q, market, PER_QUERY_LIMIT)),
     );
     const anySearchOk = results.some((r) => r.ok);
-    const pool = new Set<string>();
-    for (const r of results) for (const uri of r.uris) pool.add(uri);
-    const uris = shuffle([...pool]).slice(0, TARGET_TRACKS);
+
+    const byId = new Map<string, Track>();
+    for (const r of results) {
+      for (const t of r.tracks) if (!byId.has(t.id)) byId.set(t.id, t);
+    }
+    const tracks = shuffle([...byId.values()]).slice(0, TARGET_TRACKS);
 
     console.log(
-      `[weave] queries=${JSON.stringify(queries)} market=${user.country} ` +
-        `pool=${pool.size} anySearchOk=${anySearchOk}`,
+      `[weave] queries=${JSON.stringify(queries)} market=${market} ` +
+        `unique=${byId.size} anySearchOk=${anySearchOk}`,
     );
 
-    if (uris.length === 0) {
-      // Every search request failed → a real problem, not a genuine no-match.
-      if (!anySearchOk) {
-        return NextResponse.json({ error: "search_failed" }, { status: 502 });
-      }
-      // Valid request, searches worked, but nothing matched this mood.
-      // Return 200 so a true "no matches" isn't treated as an error.
-      return NextResponse.json({ matched: false, trackCount: 0 });
+    // Every search failed → a real problem, not a genuine no-match.
+    if (tracks.length === 0 && !anySearchOk) {
+      return NextResponse.json({ error: "search_failed" }, { status: 502 });
     }
 
-    // 5. Create the playlist and fill it.
-    const fallbackDate = new Date().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-    const name = `MoodWeave · ${label || fallbackDate}`;
-    const description = "Woven to match your mood with MoodWeave.";
-
-    const playlist = await createPlaylist(
-      token,
-      user.id,
-      name,
-      description,
-      false,
-    );
-    if (!playlist) {
-      return NextResponse.json({ error: "create_failed" }, { status: 502 });
-    }
-
-    const added = await addTracks(token, playlist.id, uris);
-    if (!added) {
-      return NextResponse.json({ error: "add_failed" }, { status: 502 });
-    }
-
-    // 6. Done — hand the playlist back to the UI.
-    return NextResponse.json({
-      url: playlist.url,
-      name,
-      trackCount: uris.length,
-    });
+    // 200 with the tracks (possibly empty → UI shows a "no matches" note).
+    return NextResponse.json({ tracks });
   } catch {
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
