@@ -35,6 +35,9 @@ body {
   border-radius: 9999px;
   cursor: pointer;
   outline: none;
+  /* Let a horizontal finger-drag move the thumb instead of scrolling the page;
+     vertical drags still scroll. Without this, touch only registers as taps. */
+  touch-action: pan-y;
 }
 
 /* Thumb — generous 20px target for thumbs on phones */
